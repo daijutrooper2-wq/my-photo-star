@@ -326,10 +326,10 @@
   appId: "1:52063507810:web:9962faa66eb249a4ee883b",
   measurementId: "G-2HZQ6G0FTV"
 };
-
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
+    const appId = firebaseConfig.appId;
 
 　　// --- グローバルステート ---
     let currentUser = null;
