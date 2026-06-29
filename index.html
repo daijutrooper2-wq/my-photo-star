@@ -697,7 +697,7 @@
       renderPhotos();
     }
 
-    function renderPhotos() {
+   function renderPhotos() {
       els.count.textContent = photoList.length;
       if (photoList.length === 0) {
         els.grid.classList.add('hidden'); els.empty.classList.remove('hidden'); return;
@@ -712,6 +712,14 @@
       }
 
       sortedPhotos.forEach(photo => {
+        // 【ここを追加！】大画面表示の中のダウンロードボタンで画像が開いてしまうのを防ぐ対策
+        // URLの中に「/upload/」があれば、そこを「/upload/fl_attachment/」に強制的に書き換える
+        let displayUrl = photo.url;
+        let downloadUrl = photo.url;
+        if (photo.url && photo.url.includes('/upload/')) {
+          downloadUrl = photo.url.replace('/upload/', '/upload/fl_attachment/');
+        }
+
         const isLiked = (photo.likedBy || []).includes(currentUser?.uid);
         const likeCount = (photo.likedBy || []).length;
         const commentCount = (photo.comments || []).length;
@@ -719,7 +727,7 @@
         const div = document.createElement('div');
         div.className = "group relative aspect-square bg-stone-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 fade-in";
         div.innerHTML = `
-          <img src="${photo.url}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-pointer" loading="lazy" />
+          <img src="${displayUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-pointer" loading="lazy" />
           <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-8 flex justify-between items-end">
             <div class="flex flex-col text-white text-[10px] md:text-xs">
               <span class="font-bold truncate max-w-[90px]"><i class="fa-solid fa-user mr-1 text-theme"></i>${photo.guestName || 'ゲスト'}</span>
@@ -733,7 +741,11 @@
             </div>
           </div>
         `;
-        div.querySelector('img').addEventListener('click', () => openLightbox(photo));
+        
+        // 【修正】大画面を開くときに、新しく作った「ダウンロード用URL（downloadUrl）」を含めた写真データを渡す
+        const modifiedPhoto = { ...photo, url: downloadUrl };
+        div.querySelector('img').addEventListener('click', () => openLightbox(modifiedPhoto));
+        
         div.querySelector('.like-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleLike(photo.id); });
         els.grid.appendChild(div);
       });
