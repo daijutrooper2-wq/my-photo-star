@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Photo Share</title>
+  
+  <!-- JSZip (一括保存用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            theme: 'var(--theme-color)',
+            themeDark: 'var(--theme-color-dark)',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --theme-color: #d97706; 
+      --theme-color-dark: #b45309;
+    }
+    .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-fade { animation: slideFade 5s ease-in-out infinite; }
+    @keyframes slideFade {
+      0% { opacity: 0; transform: scale(1.05); }
+      10% { opacity: 1; transform: scale(1); }
+      90% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(0.95); }
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-stone-50 text-stone-800 min-h-screen flex flex-col font-sans transition-colors duration-500">
+
+  <!-- ヘッダー -->
+  <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-stone-200 shadow-sm transition-all duration-300">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2 md:space-x-3 truncate">
+        <button id="btnBackToLobby" class="hidden text-stone-400 hover:text-stone-700 p-2 rounded-full hover:bg-stone-100 transition-colors mr-1">
+          <i class="fa-solid fa-arrow-left text-lg"></i>
+        </button>
+        <div id="headerIconWrapper" class="bg-theme text-white p-2 rounded-full shadow-sm transition-colors">
+          <i class="fa-solid fa-camera-retro"></i>
+        </div>
+        <div class="truncate">
+          <h1 id="headerEventName" class="text-lg md:text-xl font-bold tracking-wide text-stone-900 truncate transition-all">My Events</h1>
+          <p id="headerEventDate" class="text-xs text-stone-500 truncate"></p>
+        </div>
+      </div>
+      
+      <div id="headerActionsGallery" class="hidden flex items-center space-x-1 md:space-x-2 flex-shrink-0">
+        <button id="btnShareEvent" class="text-stone-500 hover:text-theme transition-colors p-2 rounded-full hover:bg-stone-100" title="URLをシェア">
+          <i class="fa-solid fa-share-nodes text-lg"></i>
+        </button>
+        <button id="btnStartSlideshow" class="text-stone-500 hover:text-theme transition-colors p-2 rounded-full hover:bg-stone-100" title="スライドショー">
+          <i class="fa-solid fa-play text-lg"></i>
+        </button>
+        <button id="btnOpenSettings" class="text-stone-500 hover:text-theme transition-colors p-2 rounded-full hover:bg-stone-100" title="設定">
+          <i class="fa-solid fa-gear text-lg"></i>
+        </button>
+      </div>
+
+      <div id="headerActionsLobby" class="flex items-center space-x-1 flex-shrink-0">
+        <button onclick="openCreateEventModal()" class="bg-theme hover:bg-themeDark text-white px-4 py-2 rounded-full text-sm font-bold shadow-sm transition-all flex items-center">
+          <i class="fa-solid fa-plus mr-1 md:mr-2"></i> <span class="hidden md:inline">新規作成</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ -->
+  <main class="flex-grow max-w-6xl w-full mx-auto px-4 py-6 md:py-8">
+    <!-- ロビー画面 -->
+    <div id="lobbyScreen" class="fade-in">
+      <div class="text-center mb-10">
+        <h2 class="text-2xl font-bold text-stone-900 mb-2">イベント一覧</h2>
+        <p class="text-stone-500 text-sm">参加するイベントを選ぶか、新しく作成してください</p>
+      </div>
+      <div id="lobbyLoading" class="text-center py-16 text-stone-300">
+        <i class="fa-solid fa-spinner animate-spin text-4xl mb-4"></i>
+        <p>イベントを読み込み中...</p>
+      </div>
+      <div id="eventsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 hidden"></div>
+      <div id="lobbyEmptyState" class="hidden text-center py-16">
+        <div class="bg-stone-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-stone-300 text-3xl">
+          <i class="fa-solid fa-calendar-plus"></i>
+        </div>
+        <p class="text-stone-500 font-medium mb-4">まだイベントがありません</p>
+        <button onclick="openCreateEventModal()" class="text-theme font-bold hover:underline">最初のイベントを作成する</button>
+      </div>
+    </div>
+
+    <!-- ギャラリー画面 -->
+    <div id="galleryScreen" class="hidden fade-in">
+      <div class="mb-10 text-center max-w-2xl mx-auto">
+        <p id="mainSubMessage" class="text-stone-600 text-sm md:text-base leading-relaxed mb-6 whitespace-pre-wrap">大切な瞬間をみんなでシェア</p>
+        <div class="mb-4 text-xs md:text-sm text-stone-500 flex items-center justify-center space-x-2">
+          <i class="fa-regular fa-user"></i>
+          <span>現在の参加名: <span id="displayGuestName" class="font-bold text-theme">ゲスト</span></span>
+          <button onclick="promptGuestName(true)" class="underline text-stone-400 hover:text-stone-600">変更</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 md:gap-6">
+          <div id="btnCamera" class="bg-white border-2 border-stone-200 rounded-2xl p-4 md:p-6 opacity-50 pointer-events-none cursor-pointer hover:border-theme hover:shadow-md transition-all group flex flex-col items-center justify-center">
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" />
+            <div class="bg-theme/10 text-theme w-12 h-12 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <i class="fa-solid fa-camera text-xl"></i>
+            </div>
+            <span class="font-bold text-stone-800 text-sm md:text-base">写真を撮る</span>
+          </div>
+          <div id="btnLibrary" class="bg-white border-2 border-stone-200 rounded-2xl p-4 md:p-6 opacity-50 pointer-events-none cursor-pointer hover:border-theme hover:shadow-md transition-all group flex flex-col items-center justify-center">
+            <input type="file" id="libraryInput" accept="image/*" class="hidden" />
+            <div class="bg-theme/10 text-theme w-12 h-12 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <i class="fa-regular fa-images text-xl"></i>
+            </div>
+            <span class="font-bold text-stone-800 text-sm md:text-base">写真を選ぶ</span>
+          </div>
+        </div>
+
+        <div id="uploadProgressContainer" class="hidden mt-6 bg-white p-4 rounded-xl border border-stone-200 shadow-sm text-left">
+          <div class="flex justify-between items-center text-xs text-stone-600 mb-2">
+            <span class="font-medium"><i class="fa-solid fa-spinner animate-spin mr-2"></i>処理・保存中...</span>
+            <span id="uploadPercentage">0%</span>
+          </div>
+          <div class="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden">
+            <div id="uploadProgressBar" class="bg-theme h-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-stone-200 pt-6">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+          <h3 class="text-lg font-bold text-stone-900 flex items-center">
+            <i class="fa-solid fa-photo-film mr-2 text-theme"></i>アルバム (<span id="photoCount">0</span>枚)
+          </h3>
+          <div class="flex items-center space-x-2 text-sm bg-white border border-stone-200 rounded-lg p-1 shadow-sm">
+            <button id="sortNewest" class="px-3 py-1.5 rounded-md bg-stone-100 font-medium text-stone-800 transition-colors">最新順</button>
+            <button id="sortPopular" class="px-3 py-1.5 rounded-md text-stone-500 hover:text-stone-800 transition-colors flex items-center">
+              <i class="fa-solid fa-heart text-rose-500 mr-1 text-xs"></i>人気順
+            </button>
+          </div>
+        </div>
+        <div id="gallerySkeleton" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          <div class="aspect-square bg-stone-200 animate-pulse rounded-xl"></div>
+          <div class="aspect-square bg-stone-200 animate-pulse rounded-xl"></div>
+        </div>
+        <div id="photoGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 hidden"></div>
+        <div id="emptyState" class="hidden text-center py-16">
+          <div class="bg-stone-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-stone-300 text-3xl">
+            <i class="fa-regular fa-image"></i>
+          </div>
+          <p class="text-stone-500 font-medium">まだ写真がありません</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 各種モーダル -->
+  <!-- 新規イベント作成 -->
+  <div id="createEventModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="text-lg font-bold flex items-center"><i class="fa-solid fa-calendar-plus text-theme mr-2"></i>イベント作成</h2>
+        <button onclick="closeCreateEventModal()" class="text-stone-400 hover:text-stone-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 transition-colors"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-stone-600 mb-1">イベント名 / タイトル <span class="text-red-500">*</span></label>
+          <input type="text" id="newEvName" class="w-full border border-stone-300 rounded-lg px-4 py-2.5 focus:outline-none focus:border-theme" placeholder="例: ○○の誕生日パーティー">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-stone-600 mb-1">日付</label>
+          <input type="text" id="newEvDate" class="w-full border border-stone-300 rounded-lg px-4 py-2.5 focus:outline-none focus:border-theme" placeholder="例: 2026年10月1日">
+        </div>
+        <div class="pt-2">
+          <button id="btnSubmitCreateEvent" class="w-full bg-theme hover:bg-themeDark text-white font-bold py-3 rounded-xl shadow-md transition-all">作成して参加する</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スライドショー -->
+  <div id="slideshowModal" class="fixed inset-0 bg-black z-50 hidden flex-col justify-center items-center">
+    <button id="btnCloseSlideshow" class="absolute top-4 right-4 text-white/50 hover:text-white z-50 p-4 bg-black/20 rounded-full backdrop-blur-sm">
+      <i class="fa-solid fa-xmark text-2xl"></i>
+    </button>
+    <div id="slideshowContainer" class="w-full h-full relative flex items-center justify-center"></div>
+    <div class="absolute bottom-6 left-0 right-0 text-center z-50">
+      <p id="slideshowInfo" class="text-white/80 bg-black/40 inline-block px-4 py-2 rounded-full backdrop-blur-sm text-sm shadow-lg"></p>
+    </div>
+  </div>
+
+  <!-- ライトボックス -->
+  <div id="lightbox" class="fixed inset-0 bg-stone-950/95 backdrop-blur-md z-50 hidden flex-col justify-between p-2 md:p-4 overflow-y-auto">
+    <div class="w-full max-w-5xl mx-auto flex justify-between items-center py-2 z-10 flex-shrink-0">
+      <div class="text-stone-300 text-xs md:text-sm flex flex-col">
+        <span id="lightboxGuest" class="font-bold text-white mb-1"></span>
+        <span id="lightboxTime"></span>
+      </div>
+      <button id="closeLightboxBtn" class="bg-white/10 hover:bg-white/20 text-white w-10 h-10 rounded-full flex items-center justify-center transition-all">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="w-full max-w-5xl mx-auto flex flex-col md:flex-row flex-grow items-center md:items-stretch justify-center gap-6 overflow-hidden my-2">
+      <div class="w-full md:w-3/5 flex items-center justify-center bg-black/20 rounded-xl relative overflow-hidden min-h-[30vh] md:min-h-0">
+        <img id="lightboxImg" src="" class="max-h-[50vh] md:max-h-[70vh] max-w-full object-contain rounded-lg shadow-2xl" />
+      </div>
+      
+      <div class="w-full md:w-2/5 flex flex-col bg-stone-900/50 backdrop-blur-sm border border-white/10 rounded-xl p-4 text-white overflow-hidden max-h-[40vh] md:max-h-[70vh]">
+        <h5 class="text-sm font-bold border-b border-white/10 pb-2 mb-3 flex items-center">
+          <i class="fa-regular fa-comments mr-2 text-theme"></i>コメント
+        </h5>
+        
+        <div id="lightboxCommentsList" class="flex-grow overflow-y-auto space-y-3 pr-1 text-sm no-scrollbar"></div>
+        
+        <div class="mt-3 pt-3 border-t border-white/10 flex gap-2 flex-shrink-0">
+          <input type="text" id="lightboxCommentInput" placeholder="コメントを書く..." class="flex-grow bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-stone-400 focus:outline-none focus:border-theme">
+          <button id="lightboxCommentSubmitBtn" class="bg-theme hover:bg-themeDark text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors">
+            <i class="fa-regular fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="w-full max-w-xl mx-auto py-3 flex justify-center space-x-6 z-10 bg-black/40 rounded-full px-6 mb-2 backdrop-blur-sm flex-shrink-0">
+      <button id="lbLikeBtn" class="flex flex-col items-center justify-center text-white/70 hover:text-rose-500 transition-colors w-16">
+        <i class="fa-solid fa-heart text-2xl mb-1 transition-transform" id="lbLikeIcon"></i>
+        <span class="text-xs font-bold" id="lbLikeCount">0</span>
+      </button>
+      <a id="lbDownloadBtn" href="#" target="_blank" download class="flex flex-col items-center justify-center text-white/70 hover:text-white transition-colors w-16">
+        <i class="fa-solid fa-arrow-down text-2xl mb-1"></i>
+        <span class="text-xs">保存</span>
+      </a>
+      <button id="lbDeleteBtn" class="flex flex-col items-center justify-center text-white/70 hover:text-red-500 transition-colors w-16">
+        <i class="fa-solid fa-trash-can text-2xl mb-1"></i>
+        <span class="text-xs">削除</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- イベント設定 -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto no-scrollbar shadow-xl fade-in">
+      <div class="sticky top-0 bg-white border-b border-stone-100 px-6 py-4 flex justify-between items-center z-10">
+        <h2 class="text-lg font-bold"><i class="fa-solid fa-sliders text-theme mr-2"></i>イベント設定</h2>
+        <button onclick="closeSettings()" class="text-stone-400 hover:text-stone-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 transition-colors"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="p-6 space-y-5">
+        <div>
+          <label class="block text-xs font-bold text-stone-600 mb-1">イベント名 / タイトル</label>
+          <input type="text" id="setEventName" class="w-full border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-theme" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-stone-600 mb-1">日付</label>
+          <input type="text" id="setEventDate" class="w-full border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-theme" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-stone-600 mb-1">サブメッセージ</label>
+          <textarea id="setSubMessage" rows="2" class="w-full border border-stone-300 rounded-lg px-3 py-2 focus:outline-none focus:border-theme resize-none"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-stone-600 mb-1">テーマカラー</label>
+            <div class="flex items-center space-x-2">
+              <input type="color" id="setThemeColor" class="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+              <span class="text-xs text-stone-500">色を選択</span>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-stone-600 mb-1">アップロード画質</label>
+            <select id="setQuality" class="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-theme">
+              <option value="1.0">高画質 (最大2400px・おすすめ)</option>
+              <option value="0.8">標準 (最大1200px)</option>
+              <option value="0.5">低画質 (最大800px・データ節約)</option>
+            </select>
+          </div>
+        </div>
+        <div class="pt-4 border-t border-stone-100 flex justify-end">
+          <button id="btnSaveSettings" class="bg-theme hover:bg-themeDark text-white font-bold px-6 py-2 rounded-full shadow-sm text-sm w-full md:w-auto">設定を保存する</button>
+        </div>
+        <div class="pt-6 border-t border-stone-100">
+          <h3 class="text-sm font-bold text-stone-800 mb-3"><i class="fa-solid fa-toolbox mr-1"></i>ツール / 危険な操作</h3>
+          <div class="space-y-3">
+            <button id="btnDownloadAll" class="w-full bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium px-4 py-3 rounded-xl text-sm flex items-center justify-between">
+              <span><i class="fa-solid fa-file-zipper mr-2 text-indigo-500"></i>全画像をZIPで一括保存</span>
+              <i class="fa-solid fa-chevron-right text-stone-400"></i>
+            </button>
+            <button id="btnDeleteEvent" class="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium px-4 py-3 rounded-xl text-sm flex items-center justify-between">
+              <span><i class="fa-solid fa-triangle-exclamation mr-2"></i>このイベントと全画像を削除</span>
+              <i class="fa-solid fa-chevron-right text-rose-400"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="guestNameModal" class="fixed inset-0 bg-stone-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl fade-in">
+      <div class="w-16 h-16 bg-theme/10 text-theme rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+        <i class="fa-solid fa-champagne-glasses"></i>
+      </div>
+      <h3 class="text-xl font-bold mb-2">ようこそ！</h3>
+      <p class="text-stone-500 text-sm mb-6">みんなにわかるように、<br>あなたのお名前（ニックネーム）を教えてください。</p>
+      <input type="text" id="inputGuestName" placeholder="お名前を入力" class="w-full text-center border-2 border-stone-200 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:border-theme mb-4" />
+      <button onclick="saveGuestName()" class="w-full bg-theme hover:bg-themeDark text-white font-bold py-3 rounded-xl shadow-md">決定する</button>
+    </div>
+  </div>
+
+  <div id="customDialog" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl text-center fade-in">
+      <div id="dialogIcon" class="text-4xl mb-3"></div>
+      <h4 id="dialogTitle" class="text-lg font-bold text-stone-900 mb-2"></h4>
+      <p id="dialogMessage" class="text-stone-600 text-sm mb-6"></p>
+      <div id="dialogActions" class="flex justify-center space-x-3"></div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toastNotification" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900/95 text-white text-sm px-6 py-3.5 rounded-full shadow-xl z-[70] transition-all duration-300 transform translate-y-12 opacity-0 pointer-events-none flex items-center space-x-2.5">
+    <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+    <span id="toastMessage" class="font-medium tracking-wide">操作が完了しました</span>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, addDoc, onSnapshot, updateDoc, deleteDoc, arrayUnion, arrayRemove, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+  const firebaseConfig = {apiKey: "AIzaSyBjinud68yCsAloZGqebVZAMd-w-a71KNQ",authDomain: "no1snap.firebaseapp.com",projectId: "no1snap",
+  storageBucket: "no1snap.firebasestorage.app",messagingSenderId: "423365432592",appId: "1:423365432592:web:364c1b5abde016c3a04195",
+  measurementId: "G-NXM90WJE9E"};const appId = typeof __app_id !== 'undefined' ? __app_id : 'realtime-photo-share';
+
+    const cloudinaryConfig = {cloudName: "dzxhqvfpg", uploadPreset: "otrqq4za" };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let currentUser = null;
+    let currentEventId = null;
+    let photoList = []; 
+    let currentSort = 'newest'; 
+    let currentSettings = { eventName: "Share Gallery", eventDate: "Today", subMessage: "素敵な写真を共有しよう", themeColor: "#d97706", uploadQuality: 1.0 };
+    let guestName = localStorage.getItem(`event_${appId}_guestName`) || '';
+    let slideshowInterval = null;
+    let currentLightboxPhotoId = null;
+    let currentLightboxPhoto = null;
+    
+    let unsubEventsList = null;
+    let unsubEventSettings = null;
+    let unsubEventPhotos = null;
+
+    const els = {
+      lobby: document.getElementById('lobbyScreen'),
+      gallery: document.getElementById('galleryScreen'),
+      hEventName: document.getElementById('headerEventName'),
+      hEventDate: document.getElementById('headerEventDate'),
+      hActionsGallery: document.getElementById('headerActionsGallery'),
+      hActionsLobby: document.getElementById('headerActionsLobby'),
+      btnBack: document.getElementById('btnBackToLobby'),
+      btnShare: document.getElementById('btnShareEvent'),
+      eventsGrid: document.getElementById('eventsGrid'),
+      lobbyLoading: document.getElementById('lobbyLoading'),
+      lobbyEmpty: document.getElementById('lobbyEmptyState'),
+      createModal: document.getElementById('createEventModal'),
+      newEvName: document.getElementById('newEvName'),
+      newEvDate: document.getElementById('newEvDate'),
+      btnCreateSubmit: document.getElementById('btnSubmitCreateEvent'),
+      grid: document.getElementById('photoGrid'),
+      skeleton: document.getElementById('gallerySkeleton'),
+      empty: document.getElementById('emptyState'),
+      count: document.getElementById('photoCount'),
+      subMsg: document.getElementById('mainSubMessage'),
+      displayGuestName: document.getElementById('displayGuestName'),
+      sortNew: document.getElementById('sortNewest'),
+      sortPop: document.getElementById('sortPopular'),
+      camIn: document.getElementById('cameraInput'),
+      libIn: document.getElementById('libraryInput'),
+      progCont: document.getElementById('uploadProgressContainer'),
+      progBar: document.getElementById('uploadProgressBar'),
+      progPct: document.getElementById('uploadPercentage'),
+      btnCamera: document.getElementById('btnCamera'),
+      btnLibrary: document.getElementById('btnLibrary'),
+      lb: document.getElementById('lightbox'),
+      lbImg: document.getElementById('lightboxImg'),
+      lbTime: document.getElementById('lightboxTime'),
+      lbGuest: document.getElementById('lightboxGuest'),
+      lbLikeBtn: document.getElementById('lbLikeBtn'),
+      lbLikeIcon: document.getElementById('lbLikeIcon'),
+      lbLikeCount: document.getElementById('lbLikeCount'),
+      lbDelBtn: document.getElementById('lbDeleteBtn'),
+      lbDlBtn: document.getElementById('lbDownloadBtn'),
+      lbCommentsList: document.getElementById('lightboxCommentsList'),
+      lbCommentInput: document.getElementById('lightboxCommentInput'),
+      lbCommentSubmitBtn: document.getElementById('lightboxCommentSubmitBtn'),
+      setModal: document.getElementById('settingsModal'),
+      setEvName: document.getElementById('setEventName'),
+      setEvDate: document.getElementById('setEventDate'),
+      setSubMsg: document.getElementById('setSubMessage'),
+      setTheme: document.getElementById('setThemeColor'),
+      setQual: document.getElementById('setQuality'),
+      btnSaveSet: document.getElementById('btnSaveSettings'),
+      ssModal: document.getElementById('slideshowModal'),
+      ssCont: document.getElementById('slideshowContainer'),
+      ssInfo: document.getElementById('slideshowInfo'),
+      toast: document.getElementById('toastNotification'),
+      toastMsg: document.getElementById('toastMessage')
+    };
+
+    function safePushState(url) {
+      try { window.history.pushState({}, '', url); } catch (e) { console.warn("Fallback routing used."); }
+    }
+
+    async function initApp() {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { showDialog("error", "接続エラー", "認証に失敗しました。"); }
+
+      onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        if (user) {
+          els.btnCamera.classList.remove('opacity-50', 'pointer-events-none');
+          els.btnLibrary.classList.remove('opacity-50', 'pointer-events-none');
+          checkGuestName();
+          handleRouting();
+        }
+      });
+      
+      window.addEventListener('popstate', () => handleRouting(true));
+
+      els.btnCamera.addEventListener('click', () => els.camIn.click());
+      els.btnLibrary.addEventListener('click', () => els.libIn.click());
+      els.camIn.addEventListener('change', handleUpload);
+      els.libIn.addEventListener('change', handleUpload);
+      els.sortNew.addEventListener('click', () => setSort('newest'));
+      els.sortPop.addEventListener('click', () => setSort('popular'));
+      document.getElementById('btnOpenSettings').addEventListener('click', openSettings);
+      els.btnSaveSet.addEventListener('click', saveSettingsToFirebase);
+      document.getElementById('btnStartSlideshow').addEventListener('click', startSlideshow);
+      document.getElementById('btnCloseSlideshow').addEventListener('click', stopSlideshow);
+      document.getElementById('closeLightboxBtn').addEventListener('click', closeLightbox);
+      els.lbLikeBtn.addEventListener('click', toggleLikeFromLightbox);
+      els.lbDelBtn.addEventListener('click', deleteFromLightbox);
+      els.lbCommentSubmitBtn.addEventListener('click', submitComment);
+      els.lbCommentInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') submitComment(); });
+      document.getElementById('btnDownloadAll').addEventListener('click', downloadAllImages);
+      document.getElementById('btnDeleteEvent').addEventListener('click', confirmDeleteEvent); 
+      els.btnBack.addEventListener('click', () => navigateToLobby());
+      els.btnShare.addEventListener('click', shareEventUrl);
+      els.btnCreateSubmit.addEventListener('click', submitCreateEvent);
+    }
+
+    function handleRouting(isPopState = false) {
+      let evId = null;
+      try {
+        const params = new URLSearchParams(window.location.search);
+        evId = params.get('event');
+      } catch (e) {}
+      if (evId) enterEvent(evId, isPopState);
+      else showLobby(isPopState);
+    }
+    
+    function navigateToLobby() {
+      safePushState(window.location.pathname || '/');
+      showLobby();
+    }
+
+    function showLobby(isPopState = false) {
+      currentEventId = null;
+      if(unsubEventSettings) { unsubEventSettings(); unsubEventSettings = null; }
+      if(unsubEventPhotos) { unsubEventPhotos(); unsubEventPhotos = null; }
+      els.gallery.classList.add('hidden');
+      els.lobby.classList.remove('hidden');
+      els.hActionsGallery.classList.add('hidden');
+      els.hActionsLobby.classList.remove('hidden');
+      els.btnBack.classList.add('hidden');
+      els.hEventName.textContent = "My Events";
+      els.hEventDate.textContent = "イベントを選んでください";
+      resetThemeColor();
+
+      const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+      if (!unsubEventsList) {
+        unsubEventsList = onSnapshot(eventsRef, (snapshot) => {
+          els.lobbyLoading.classList.add('hidden');
+          const events = [];
+          snapshot.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
+          renderLobbyEvents(events);
+        }, err => console.error(err));
+      }
+    }
+
+    function renderLobbyEvents(events) {
+      els.eventsGrid.innerHTML = '';
+      if (events.length === 0) {
+        els.eventsGrid.classList.add('hidden');
+        els.lobbyEmpty.classList.remove('hidden');
+        return;
+      }
+      els.lobbyEmpty.classList.add('hidden');
+      els.eventsGrid.classList.remove('hidden');
+      events.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      
+      events.forEach(ev => {
+        const div = document.createElement('div');
+        const color = ev.themeColor || '#d97706';
+        div.className = "bg-white border border-stone-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between h-full";
+        div.onclick = () => {
+          safePushState(`?event=${ev.id}`);
+          enterEvent(ev.id);
+        };
+        div.innerHTML = `
+          <div>
+            <div class="flex items-center mb-3">
+              <div class="w-10 h-10 rounded-full text-white flex items-center justify-center shadow-sm mr-3" style="background-color: ${color}">
+                <i class="fa-solid fa-camera-retro"></i>
+              </div>
+              <div class="overflow-hidden">
+                <h3 class="font-bold text-stone-800 text-lg truncate group-hover:text-stone-600 transition-colors">${ev.eventName}</h3>
+                <p class="text-xs text-stone-500 truncate">${ev.eventDate || '日付未設定'}</p>
+              </div>
+            </div>
+            <p class="text-sm text-stone-600 line-clamp-2">${ev.subMessage || ''}</p>
+          </div>
+          <div class="mt-4 pt-4 border-t border-stone-100 flex justify-between items-center text-xs text-stone-400">
+             <span>参加して写真を見る</span>
+             <i class="fa-solid fa-chevron-right group-hover:translate-x-1 transition-transform"></i>
+          </div>
+        `;
+        els.eventsGrid.appendChild(div);
+      });
+    }
+
+    window.openCreateEventModal = () => {
+      els.newEvName.value = ''; els.newEvDate.value = '';
+      els.createModal.classList.remove('hidden');
+    }
+    window.closeCreateEventModal = () => els.createModal.classList.add('hidden');
+
+    async function submitCreateEvent() {
+      const name = els.newEvName.value.trim();
+      if (!name) return showDialog("warning", "入力エラー", "イベント名を入力してください。");
+      const date = els.newEvDate.value.trim();
+      els.btnCreateSubmit.disabled = true;
+      els.btnCreateSubmit.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+      
+      try {
+        const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+        const docRef = await addDoc(eventsRef, {
+          eventName: name, eventDate: date, subMessage: "素敵な写真をみんなで共有しよう", themeColor: "#d97706", uploadQuality: 1.0, createdAt: new Date(), createdBy: currentUser ? currentUser.uid : 'anonymous'
+        });
+        closeCreateEventModal();
+        showToast("イベントを作成しました！");
+        safePushState(`?event=${docRef.id}`);
+        enterEvent(docRef.id);
+      } catch (err) {
+        showDialog("error", "エラー", "イベントの作成に失敗しました。");
+      } finally {
+        els.btnCreateSubmit.disabled = false;
+        els.btnCreateSubmit.innerHTML = '作成して参加する';
+      }
+    }
+
+    function enterEvent(eventId, isPopState = false) {
+      currentEventId = eventId;
+      if(unsubEventsList) { unsubEventsList(); unsubEventsList = null; }
+      els.lobby.classList.add('hidden');
+      els.gallery.classList.remove('hidden');
+      els.hActionsLobby.classList.add('hidden');
+      els.hActionsGallery.classList.remove('hidden');
+      els.hActionsGallery.classList.add('flex');
+      els.btnBack.classList.remove('hidden');
+      els.skeleton.classList.remove('hidden');
+      els.grid.innerHTML = '';
+      
+      const eventDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+      unsubEventSettings = onSnapshot(eventDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          currentSettings = { ...currentSettings, ...docSnap.data() };
+          applySettingsToUI();
+        } else {
+          showDialog("warning", "エラー", "このイベントは存在しません。", [{ label: "一覧に戻る", class: "bg-theme text-white", action: () => { closeDialog(); navigateToLobby(); } }]);
+        }
+      }, err => console.error(err));
+
+      const photosCollectionName = `event_photos_${eventId}`;
+      const photosRef = collection(db, 'artifacts', appId, 'public', 'data', photosCollectionName);
+      unsubEventPhotos = onSnapshot(photosRef, (snapshot) => {
+        els.skeleton.classList.add('hidden');
+        photoList = [];
+        snapshot.forEach((doc) => { photoList.push({ id: doc.id, ...doc.data() }); });
+        renderPhotos();
+        
+        if (currentLightboxPhotoId) {
+          const updatedPhoto = photoList.find(p => p.id === currentLightboxPhotoId);
+          if (updatedPhoto) {
+            currentLightboxPhoto = updatedPhoto;
+            renderComments(updatedPhoto.comments || []);
+          }
+        }
+      }, err => console.error(err));
+    }
+    
+    function applySettingsToUI() {
+      els.hEventName.textContent = currentSettings.eventName || 'Share Gallery';
+      els.hEventDate.textContent = currentSettings.eventDate || '';
+      els.subMsg.textContent = currentSettings.subMessage || '';
+      document.documentElement.style.setProperty('--theme-color', currentSettings.themeColor || '#d97706');
+      
+      let hex = (currentSettings.themeColor || '#d97706').replace('#', '');
+      let r = parseInt(hex.substring(0, 2), 16), g = parseInt(hex.substring(2, 4), 16), b = parseInt(hex.substring(4, 6), 16);
+      r = Math.max(0, r - 30); g = Math.max(0, g - 30); b = Math.max(0, b - 30);
+      let darkHex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).padStart(6, '0');
+      document.documentElement.style.setProperty('--theme-color-dark', darkHex);
+    }
+    
+    function resetThemeColor() {
+      document.documentElement.style.setProperty('--theme-color', '#d97706');
+      document.documentElement.style.setProperty('--theme-color-dark', '#b45309');
+    }
+
+    function shareEventUrl() {
+      let url = window.location.href;
+      if (url.startsWith('blob:')) url = `https://your-domain.com/?event=${currentEventId}`;
+      if (navigator.share) {
+        navigator.share({ title: currentSettings.eventName, text: '写真を共有しよう！', url: url }).catch(console.error);
+      } else {
+        const input = document.createElement('input'); input.value = url; document.body.appendChild(input); input.select();
+        try { document.execCommand('copy'); showToast("招待用URLをコピーしました！"); } catch(e) {}
+        document.body.removeChild(input);
+      }
+    }
+
+    function showToast(message) {
+      els.toastMsg.textContent = message;
+      els.toast.classList.remove('translate-y-12', 'opacity-0', 'pointer-events-none');
+      els.toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        els.toast.classList.remove('translate-y-0', 'opacity-100');
+        els.toast.classList.add('translate-y-12', 'opacity-0', 'pointer-events-none');
+      }, 2500);
+    }
+
+    function checkGuestName() {
+      if (!guestName) document.getElementById('guestNameModal').classList.remove('hidden');
+      else els.displayGuestName.textContent = guestName;
+    }
+    window.promptGuestName = () => {
+      document.getElementById('inputGuestName').value = guestName;
+      document.getElementById('guestNameModal').classList.remove('hidden');
+    };
+    window.saveGuestName = () => {
+      const name = document.getElementById('inputGuestName').value.trim() || 'ゲスト';
+      guestName = name;
+      localStorage.setItem(`event_${appId}_guestName`, name);
+      els.displayGuestName.textContent = name;
+      document.getElementById('guestNameModal').classList.add('hidden');
+    };
+
+    function setSort(type) {
+      currentSort = type;
+      if(type === 'newest') {
+        els.sortNew.className = "px-3 py-1.5 rounded-md bg-stone-100 font-medium text-stone-800 shadow-sm transition-colors";
+        els.sortPop.className = "px-3 py-1.5 rounded-md text-stone-500 hover:text-stone-800 transition-colors flex items-center";
+      } else {
+        els.sortPop.className = "px-3 py-1.5 rounded-md bg-rose-50 font-medium text-rose-600 shadow-sm transition-colors flex items-center";
+        els.sortNew.className = "px-3 py-1.5 rounded-md text-stone-500 hover:text-stone-800 transition-colors";
+      }
+      renderPhotos();
+    }
+
+    function renderPhotos() {
+      els.count.textContent = photoList.length;
+      if (photoList.length === 0) {
+        els.grid.classList.add('hidden'); els.empty.classList.remove('hidden'); return;
+      }
+      els.empty.classList.add('hidden'); els.grid.classList.remove('hidden'); els.grid.innerHTML = '';
+
+      let sortedPhotos = [...photoList];
+      if (currentSort === 'newest') {
+        sortedPhotos.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      } else if (currentSort === 'popular') {
+        sortedPhotos.sort((a, b) => ((b.likedBy || []).length) - ((a.likedBy || []).length) || ((b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+      }
+
+      sortedPhotos.forEach(photo => {
+        const isLiked = (photo.likedBy || []).includes(currentUser?.uid);
+        const likeCount = (photo.likedBy || []).length;
+        const commentCount = (photo.comments || []).length;
+        
+        const div = document.createElement('div');
+        div.className = "group relative aspect-square bg-stone-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 fade-in";
+        div.innerHTML = `
+          <img src="${photo.url}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-pointer" loading="lazy" />
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-8 flex justify-between items-end">
+            <div class="flex flex-col text-white text-[10px] md:text-xs">
+              <span class="font-bold truncate max-w-[90px]"><i class="fa-solid fa-user mr-1 text-theme"></i>${photo.guestName || 'ゲスト'}</span>
+            </div>
+            <div class="flex items-center space-x-2 text-white/80 text-xs">
+              ${commentCount > 0 ? `<span class="flex items-center space-x-0.5"><i class="fa-regular fa-comment"></i><span>${commentCount}</span></span>` : ''}
+              <button class="like-btn flex items-center space-x-0.5 ${isLiked ? 'text-rose-500' : 'text-white/70'}" data-id="${photo.id}">
+                <i class="${isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                <span class="font-bold">${likeCount > 0 ? likeCount : ''}</span>
+              </button>
+            </div>
+          </div>
+        `;
+        div.querySelector('img').addEventListener('click', () => openLightbox(photo));
+        div.querySelector('.like-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleLike(photo.id); });
+        els.grid.appendChild(div);
+      });
+    }
+
+    async function toggleLike(photoId) {
+      if (!currentUser || !currentEventId) return;
+      const photo = photoList.find(p => p.id === photoId);
+      if (!photo) return;
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', `event_photos_${currentEventId}`, photoId);
+      if ((photo.likedBy || []).includes(currentUser.uid)) await updateDoc(docRef, { likedBy: arrayRemove(currentUser.uid) });
+      else await updateDoc(docRef, { likedBy: arrayUnion(currentUser.uid) });
+    }
+    function toggleLikeFromLightbox() { if(currentLightboxPhotoId) toggleLike(currentLightboxPhotoId); }
+
+    // --- 高画質 画像圧縮ロジック（Blob変換・Cloudinary用） ---
+    async function compressImageToBlob(file, qualitySetting) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader(); 
+        reader.readAsDataURL(file);
+        reader.onload = (e) => {
+          const img = new Image(); 
+          img.src = e.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            
+            // Cloudinaryは保存容量・通信量の無料枠が大きいため、高解像度を維持します
+            let maxSize = 1200; // 標準画質
+            let quality = 0.8; // 圧縮比
+            
+            const q = parseFloat(qualitySetting);
+            if (q === 1.0) {
+              maxSize = 2400; // 高画質（40人規模のイベントならこのサイズでも十分無料枠に収まります）
+              quality = 0.9;
+            } else if (q === 0.5) {
+              maxSize = 800;  // データ節約画質
+              quality = 0.6;
+            }
+            
+            let width = img.width, height = img.height;
+            if (width > height && width > maxSize) {
+              height *= maxSize / width; 
+              width = maxSize;
+            } else if (height > maxSize) {
+              width *= maxSize / height; 
+              height = maxSize;
+            }
+            
+            canvas.width = width; 
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Canvas conversion failed"));
+            }, 'image/jpeg', quality);
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+      });
+    }
+
+    async function handleUpload(e) {
+      if(!currentEventId) return;
+      const file = e.target.files[0]; if (!file) return;
+      let user = auth.currentUser || currentUser;
+      
+      if (cloudinaryConfig.cloudName === "YOUR_CLOUD_NAME" || cloudinaryConfig.uploadPreset === "YOUR_UPLOAD_PRESET") {
+        showDialog("warning", "設定エラー", "Cloudinaryの cloudName と uploadPreset をソースコードに設定してください。");
+        return;
+      }
+
+      els.progCont.classList.remove('hidden');
+      els.progBar.style.width = '10%'; 
+      els.progPct.textContent = '画像を最適化中...';
+
+      try {
+        // 画像をリサイズしてBlob形式に変換
+        const uploadBlob = await compressImageToBlob(file, currentSettings.uploadQuality);
+        
+        // CloudinaryへXMLHttpRequestを使ってアップロード (進捗表示のため)
+        const formData = new FormData();
+        formData.append('file', uploadBlob);
+        formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`);
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            // 画像処理(10%) + アップロード(90%)の比率でプログレスバーを計算
+            const p = 10 + Math.round((event.loaded / event.total) * 90);
+            els.progBar.style.width = `${p}%`;
+            els.progPct.textContent = `アップロード中... (${p}%)`;
+          }
+        };
+
+        xhr.onload = async () => {
+          if (xhr.status === 200) {
+            const response = JSON.parse(xhr.responseText);
+            const secureUrl = response.secure_url;
+
+            // 取得したCloudinaryのURLをFirestoreに保存
+            const photosCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', `event_photos_${currentEventId}`);
+            await addDoc(photosCollectionRef, {
+              url: secureUrl,
+              userId: user.uid, 
+              guestName: guestName || 'ゲスト', 
+              createdAt: new Date(), 
+              likedBy: [], 
+              comments: [],
+              publicId: response.public_id // 削除用に保持しておく
+            });
+            
+            els.camIn.value = ''; 
+            els.libIn.value = ''; 
+            els.progBar.style.width = '100%'; 
+            els.progPct.textContent = '完了！';
+            
+            setTimeout(() => { 
+              els.progCont.classList.add('hidden'); 
+              showToast("写真を投稿しました！"); 
+            }, 800);
+          } else {
+            console.error("Cloudinary error:", xhr.responseText);
+            els.progCont.classList.add('hidden');
+            showDialog("error", "エラー", "Cloudinaryへのアップロードに失敗しました。Presetの設定等を確認してください。");
+          }
+        };
+
+        xhr.onerror = () => {
+          els.progCont.classList.add('hidden');
+          showDialog("error", "通信エラー", "アップロード中に通信エラーが発生しました。");
+        };
+
+        xhr.send(formData);
+
+      } catch (err) { 
+        console.error("Upload preparation error:", err);
+        els.progCont.classList.add('hidden'); 
+        showDialog("error", "エラー", "写真データの読み込みに失敗しました。");
+      }
+    }
+
+    // --- ライトボックス・コメント関連処理 ---
+    function openLightbox(photo) {
+      currentLightboxPhotoId = photo.id;
+      currentLightboxPhoto = photo;
+      els.lbImg.src = photo.url;
+      
+      const dateStr = photo.createdAt ? new Date(photo.createdAt.seconds * 1000).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+      els.lbTime.textContent = dateStr;
+      els.lbGuest.innerHTML = `<i class="fa-solid fa-camera mr-1"></i>${photo.guestName || 'ゲスト'}さんが撮影`;
+      els.lbCommentInput.value = '';
+      
+      renderComments(photo.comments || []);
+      updateLightboxLikeUI();
+      els.lbDlBtn.href = photo.url;
+      els.lb.classList.remove('hidden'); els.lb.classList.add('flex');
+      document.body.style.overflow = 'hidden';
+      
+      window.lbUpdateInterval = setInterval(updateLightboxLikeUI, 1000);
+    }
+    
+    function renderComments(comments) {
+      els.lbCommentsList.innerHTML = '';
+      if(!comments || comments.length === 0) {
+        els.lbCommentsList.innerHTML = `<p class="text-stone-400 text-xs text-center py-4">コメントはまだありません</p>`;
+        return;
+      }
+      comments.forEach(c => {
+        const div = document.createElement('div');
+        div.className = "bg-white/5 border border-white/5 rounded-xl p-2.5 space-y-1 fade-in";
+        div.innerHTML = `
+          <div class="flex justify-between items-center text-[11px] text-stone-400">
+            <span class="font-bold text-theme flex items-center"><i class="fa-regular fa-user mr-1 scale-90"></i>${c.userName}</span>
+            <span>${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : ''}</span>
+          </div>
+          <p class="text-stone-200 text-xs break-all whitespace-pre-wrap">${c.text}</p>
+        `;
+        els.lbCommentsList.appendChild(div);
+      });
+      setTimeout(() => { els.lbCommentsList.scrollTop = els.lbCommentsList.scrollHeight; }, 50);
+    }
+
+    async function submitComment() {
+      const text = els.lbCommentInput.value.trim();
+      if(!text || !currentLightboxPhotoId || !currentEventId) return;
+
+      const newComment = {
+        id: crypto.randomUUID(),
+        userName: guestName || 'ゲスト',
+        text: text,
+        createdAt: new Date().toISOString()
+      };
+
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', `event_photos_${currentEventId}`, currentLightboxPhotoId);
+      els.lbCommentInput.value = '';
+
+      try {
+        await updateDoc(docRef, {
+          comments: arrayUnion(newComment)
+        });
+      } catch (e) {
+        console.error("Comment submit error", e);
+        showToast("コメントの送信に失敗しました");
+      }
+    }
+
+    function updateLightboxLikeUI() {
+      if(!currentLightboxPhotoId) return;
+      const p = photoList.find(x => x.id === currentLightboxPhotoId);
+      if(!p) return closeLightbox();
+      const isLiked = (p.likedBy || []).includes(currentUser?.uid);
+      const count = (p.likedBy || []).length;
+      els.lbLikeIcon.className = `${isLiked ? 'fa-solid text-rose-500 scale-110' : 'fa-regular'} fa-heart text-2xl mb-1 transition-transform`;
+      els.lbLikeCount.textContent = count > 0 ? count : 'いいね';
+    }
+
+    function closeLightbox() {
+      clearInterval(window.lbUpdateInterval);
+      els.lb.classList.add('hidden'); els.lb.classList.remove('flex');
+      document.body.style.overflow = '';
+      currentLightboxPhotoId = null; currentLightboxPhoto = null;
+    }
+
+    function deleteFromLightbox() { if (currentLightboxPhoto) confirmDeletePhoto(currentLightboxPhoto); }
+    
+    function confirmDeletePhoto(photo) {
+      showDialog("warning", "写真の削除", "この写真をアルバムから完全に削除しますか？", [
+        { label: "キャンセル", class: "bg-stone-200 text-stone-800", action: closeDialog },
+        { label: "削除する", class: "bg-red-500 text-white", action: () => { executeDelete(photo); closeDialog(); } }
+      ]);
+    }
+    
+    async function executeDelete(photo) {
+      closeLightbox();
+      // ※注意: Cloudinaryのファイル実体をクライアントサイドから直接削除することはできないため、Firestoreのデータ（参照）のみを削除します
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `event_photos_${currentEventId}`, photo.id));
+      showToast("写真をアルバムから削除しました");
+    }
+
+    window.openSettings = () => {
+      els.setEvName.value = currentSettings.eventName || ''; els.setEvDate.value = currentSettings.eventDate || '';
+      els.setSubMsg.value = currentSettings.subMessage || ''; els.setTheme.value = currentSettings.themeColor || '#d97706';
+      els.setQual.value = currentSettings.uploadQuality || 1.0; els.setModal.classList.remove('hidden');
+    };
+    window.closeSettings = () => els.setModal.classList.add('hidden');
+    
+    async function saveSettingsToFirebase() {
+      const newSettings = { eventName: els.setEvName.value.trim(), eventDate: els.setEvDate.value.trim(), subMessage: els.setSubMsg.value.trim(), themeColor: els.setTheme.value, uploadQuality: parseFloat(els.setQual.value) };
+      await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', currentEventId), newSettings);
+      closeSettings(); showToast("設定を更新しました");
+    }
+
+    function startSlideshow() {
+      if (photoList.length === 0) return;
+      els.ssModal.classList.remove('hidden'); els.ssModal.classList.add('flex');
+      let index = 0;
+      const showNext = () => {
+        if(index >= photoList.length) index = 0;
+        const photo = photoList[index];
+        els.ssCont.innerHTML = `<img src="${photo.url}" class="max-h-screen max-w-full object-contain slide-fade shadow-2xl" />`;
+        els.ssInfo.innerHTML = `<i class="fa-solid fa-camera mr-2"></i>${photo.guestName || 'ゲスト'}`;
+        index++;
+      };
+      showNext(); slideshowInterval = setInterval(showNext, 5000);
+    }
+    function stopSlideshow() { clearInterval(slideshowInterval); els.ssModal.classList.add('hidden'); }
+
+    // --- 一括保存処理（Cloudinaryからのダウンロード） ---
+    async function downloadAllImages() {
+      if (photoList.length === 0) return;
+      const btn = document.getElementById('btnDownloadAll');
+      btn.disabled = true;
+      try {
+        const zip = new JSZip(); 
+        const folder = zip.folder((currentSettings.eventName || "Event") + "_Photos");
+        
+        let successCount = 0;
+        for (let i = 0; i < photoList.length; i++) {
+          const url = photoList[i].url;
+          try {
+            // Cloudinaryから画像をFetchする (CORS対応)
+            const response = await fetch(url, { mode: 'cors' });
+            if (!response.ok) throw new Error("Fetch failed");
+            
+            const blob = await response.blob();
+            // URLから拡張子を取得（ない場合はjpg）
+            const ext = url.split('.').pop()?.split('?')[0] || 'jpg';
+            
+            const name = `${photoList[i].guestName || 'guest'}_${i+1}.${ext}`;
+            folder.file(name, blob);
+            successCount++;
+          } catch(e) {
+            console.error("ZIP Image fetch error:", e);
+          }
+        }
+        
+        if (successCount === 0) throw new Error("No images to zip");
+        const zipBlob = await zip.generateAsync({type:"blob"});
+        const a = document.createElement("a"); 
+        a.href = URL.createObjectURL(zipBlob); 
+        a.download = `${currentSettings.eventName || 'event'}_photos.zip`; 
+        a.click();
+        showToast("ZIPファイルのダウンロードを開始しました！");
+      } catch (err) { 
+        showDialog("warning", "エラー", "ダウンロードに失敗しました。"); 
+      }
+      btn.disabled = false; closeSettings();
+    }
+
+    function confirmDeleteEvent() {
+      showDialog("warning", "イベント削除", "このイベントを完全に削除しますか？(※画像の実データはCloudinaryに残ります)", [
+        { label: "キャンセル", class: "bg-stone-200 text-stone-800", action: closeDialog },
+        { label: "削除する", class: "bg-red-600 text-white font-bold", action: () => { executeDeleteEvent(); closeDialog(); } }
+      ]);
+    }
+    
+    async function executeDeleteEvent() {
+      // ※注意: Cloudinaryのファイル実体はそのまま残ります。Firestoreのデータ（参照）のみを削除します
+      const deletePromises = photoList.map(async (p) => {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `event_photos_${currentEventId}`, p.id));
+      });
+      await Promise.all(deletePromises);
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', currentEventId));
+      closeSettings(); navigateToLobby();
+    }
+
+    window.showDialog = function(type, title, message, buttons = null) {
+      const dialog = document.getElementById('customDialog');
+      document.getElementById('dialogTitle').textContent = title;
+      document.getElementById('dialogMessage').textContent = message;
+      const actions = document.getElementById('dialogActions'); actions.innerHTML = '';
+      if (buttons) {
+        buttons.forEach(b => {
+          const btn = document.createElement('button'); btn.className = `px-6 py-2.5 rounded-full text-sm font-medium ${b.class}`; btn.textContent = b.label; btn.onclick = b.action; actions.appendChild(btn);
+        });
+      } else {
+        const btn = document.createElement('button'); btn.className = "bg-stone-900 text-white px-8 py-2.5 rounded-full text-sm"; btn.textContent = "閉じる"; btn.onclick = window.closeDialog; actions.appendChild(btn);
+      }
+      dialog.classList.remove('hidden');
+    }
+    window.closeDialog = () => document.getElementById('customDialog').classList.add('hidden');
+
+    initApp();
+  </script>
+</body>
+</html>
