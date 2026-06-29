@@ -1036,11 +1036,20 @@
         
         if (successCount === 0) throw new Error("No images to zip");
         const zipBlob = await zip.generateAsync({type:"blob"});
+      
+        const downloadUrl = URL.createObjectURL(zipBlob);
         const a = document.createElement("a"); 
-        a.href = URL.createObjectURL(zipBlob); 
+        
+        a.href = downloadUrl; 
         a.download = `${currentSettings.eventName || 'event'}_photos.zip`; 
+      
+        document.body.appendChild(a);
         a.click();
-        showToast("ZIPファイルのダウンロードを開始しました！");
+        
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+
+        showToast("ZIPファイルのダウンロードを開始しました！"); 
       } catch (err) { 
         showDialog("warning", "エラー", "ダウンロードに失敗しました。"); 
       }
