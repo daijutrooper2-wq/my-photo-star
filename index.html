@@ -346,19 +346,16 @@
     import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, addDoc, onSnapshot, updateDoc, deleteDoc, arrayUnion, arrayRemove, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-  const firebaseConfig = {apiKey: "AIzaSyBjinud68yCsAloZGqebVZAMd-w-a71KNQ",
+  const firebaseConfig = {
+  apiKey: "AIzaSyBjinud68yCsAloZGqebVZAMd-w-a71KNQ",
   authDomain: "no1snap.firebaseapp.com",
   projectId: "no1snap",
   storageBucket: "no1snap.firebasestorage.app",
   messagingSenderId: "423365432592",
   appId: "1:423365432592:web:364c1b5abde016c3a04195",
-  measurementId: "G-NXM90WJE9E"
-};const appId = typeof __app_id !== 'undefined' ? __app_id : 'realtime-photo-share';
+  measurementId: "G-NXM90WJE9E"};
+　const appId = typeof __app_id !== 'undefined' ? __app_id : 'realtime-photo-share';
 
-
-
-
-    
     const cloudinaryConfig = {cloudName: "dzxhqvfpg", uploadPreset: "otrqq4za" };
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
